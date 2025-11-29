@@ -98,7 +98,7 @@ const AuthScreen = ({ onLogin }) => {
           <div className="w-24 h-24 bg-red-600 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-2xl shadow-red-900/50 transform rotate-3">
              <span className="text-4xl font-black text-black tracking-tighter">RCP</span>
           </div>
-          <h2 className="text-4xl font-black text-white tracking-tight">RUGBY CLUB</h2>
+          <h2 className="text-4xl font-black text-white tracking-tight">Rugby Club Portois</h2>
           <p className="text-zinc-500 mt-2 font-medium">Application Officielle</p>
         </div>
 
