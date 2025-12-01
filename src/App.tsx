@@ -124,7 +124,6 @@ const AuthScreen = ({ onLogin }) => {
              <span className="text-4xl font-black text-black tracking-tighter">RCP</span>
           </div>
           <h2 className="text-4xl font-black text-white tracking-tight">Rugby Club Portois</h2>
-          <p className="text-zinc-500 mt-2 font-medium">Application Officielle</p>
         </div>
 
         <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-6 rounded-2xl">
