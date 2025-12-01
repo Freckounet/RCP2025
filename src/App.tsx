@@ -120,8 +120,12 @@ const AuthScreen = ({ onLogin }) => {
 
       <div className="w-full max-w-md space-y-8 relative z-10">
         <div className="text-center">
-          <div className="w-24 h-24 bg-red-600 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-2xl shadow-red-900/50 transform rotate-3">
-             <span className="text-4xl font-black text-black tracking-tighter">RCP</span>
+          <div className="relative w-28 h-28 mx-auto mb-6 animate-float">
+             <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-red-500 via-amber-400 to-red-600 blur-xl opacity-60 animate-[spin_12s_linear_infinite]"></div>
+             <div className="absolute inset-2 rounded-3xl bg-red-600 blur-md opacity-70 animate-pulse"></div>
+             <div className="relative w-full h-full bg-red-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-red-900/50 transform rotate-3 transition-transform duration-500 hover:scale-105 hover:-rotate-1">
+                <span className="text-4xl font-black text-black tracking-tighter drop-shadow-[0_4px_20px_rgba(0,0,0,0.45)]">RCP</span>
+             </div>
           </div>
           <h2 className="text-4xl font-black text-white tracking-tight">Rugby Club Portois</h2>
         </div>
