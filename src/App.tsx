@@ -9,6 +9,7 @@ import {
   Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, 
   Plus, Users, BarChart3, Shield, LogOut, ChevronRight, ChevronLeft, ChevronDown, Activity, User, Lock, Clock, Filter, HelpCircle, X, ClipboardList, GripVertical, Swords, Settings, Crown, CalendarDays, Save, Check, Edit3, Trash2, Share2, Copy, MousePointer2 
 } from 'lucide-react';
+import { deleteField } from 'firebase/firestore';
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
@@ -60,6 +61,16 @@ const getStatusLabel = (status) => {
     }
 };
 
+// Hash basique pour stocker un mot de passe sans le conserver en clair
+const hashPassword = (pwd) => {
+    if (!pwd) return '';
+    if (typeof btoa === 'function') return btoa(pwd);
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(pwd, 'utf-8').toString('base64');
+    }
+    return '';
+};
+
 // --- AUTH COMPONENT ---
 const AuthScreen = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -67,6 +78,7 @@ const AuthScreen = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [error, setError] = useState('');
 
   const demoProfiles = [
     { label: 'Coach', email: 'coach@rcp.com', role: 'coach', fname: 'Coach', lname: 'Principal', position: 'Staff', category: 'staff' },
@@ -77,15 +89,28 @@ const AuthScreen = ({ onLogin }) => {
 
   const handleStandardSubmit = (e) => {
     e.preventDefault();
-    if (!email || !password) return;
+    setError('');
+    if (!email || !password) {
+      setError('Merci de saisir email et mot de passe.');
+      return;
+    }
+    if (isRegistering && password.length < 4) {
+      setError('Mot de passe trop court (4 caractères min).');
+      return;
+    }
+    const normalizedEmail = email.trim().toLowerCase();
     onLogin({
-        email,
+        email: normalizedEmail,
         role: 'player',
         first_name: firstName,
         last_name: lastName,
         position: 'Nouveau',
         category: 'avant', // Default
-        isNew: isRegistering
+        isNew: isRegistering,
+        isRegistering,
+        password
+    }).catch((err) => {
+      setError(err.message || 'Impossible de se connecter.');
     });
   };
 
@@ -108,11 +133,11 @@ const AuthScreen = ({ onLogin }) => {
              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Accès Démo Rapide</h3>
            </div>
            
-           <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
               {demoProfiles.map((p, i) => (
                 <button 
                   key={i}
-                  onClick={() => onLogin({ first_name: p.fname, last_name: p.lname, email: p.email, role: p.role, position: p.position, category: p.category })}
+                  onClick={() => onLogin({ first_name: p.fname, last_name: p.lname, email: p.email.toLowerCase(), role: p.role, position: p.position, category: p.category, isRegistering: true, password: 'demo' }).catch((err) => setError(err.message || 'Impossible de se connecter.'))}
                   className={`p-3 rounded-xl border text-left transition-all group ${p.role === 'coach' ? 'bg-red-950/30 border-red-900/50 hover:bg-red-900/50 hover:border-red-600' : 'bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800 hover:border-zinc-500'}`}
                 >
                    <div className="flex justify-between items-start mb-1">
@@ -129,13 +154,13 @@ const AuthScreen = ({ onLogin }) => {
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
            <div className="flex gap-4 mb-6 border-b border-zinc-800 pb-4">
               <button 
-                onClick={() => setIsRegistering(false)}
+                onClick={() => { setIsRegistering(false); setError(''); }}
                 className={`flex-1 text-sm font-bold pb-2 transition-colors ${!isRegistering ? 'text-white border-b-2 border-red-600' : 'text-zinc-500 hover:text-zinc-300'}`}
               >
                 Connexion
               </button>
               <button 
-                onClick={() => setIsRegistering(true)}
+                onClick={() => { setIsRegistering(true); setError(''); }}
                 className={`flex-1 text-sm font-bold pb-2 transition-colors ${isRegistering ? 'text-white border-b-2 border-red-600' : 'text-zinc-500 hover:text-zinc-300'}`}
               >
                 Inscription
@@ -201,6 +226,8 @@ const AuthScreen = ({ onLogin }) => {
               <button className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-zinc-200 transition-colors mt-2">
                 {isRegistering ? "Créer mon compte" : "Se connecter"}
               </button>
+
+              {error && <p className="text-red-500 text-sm font-semibold text-center mt-2">{error}</p>}
            </form>
         </div>
       </div>
@@ -334,6 +361,7 @@ const WeeklySummaryModal = ({ events, onClose }) => {
             });
         }
 
+        text += "Merci de confirmer vos présences sur l'application\nLien vers l'application : https://rcp-2025-5u72.vercel.app\n\n";
         text += "LES COACHS.";
         setSummaryText(text);
     }, [events]);
@@ -1332,24 +1360,32 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
 
       <div className="space-y-4">
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-                <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Prénom</label>
-                <input 
-                value={firstName} 
-                onChange={e => setFirstName(e.target.value)}
-                className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
-                />
+          {profile?.role === 'coach' ? (
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                  <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Prénom</label>
+                  <input 
+                  value={firstName} 
+                  onChange={e => setFirstName(e.target.value)}
+                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
+                  />
+              </div>
+              <div>
+                  <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Nom</label>
+                  <input 
+                  value={lastName} 
+                  onChange={e => setLastName(e.target.value)}
+                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
+                  />
+              </div>
             </div>
-            <div>
-                <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Nom</label>
-                <input 
-                value={lastName} 
-                onChange={e => setLastName(e.target.value)}
-                className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
-                />
+          ) : (
+            <div className="mb-4 p-3 rounded-xl border border-zinc-800 bg-black/40 text-left">
+              <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Identité</div>
+              <div className="text-white font-semibold">{firstName} {lastName}</div>
+              <div className="text-[11px] text-zinc-500 mt-1">Contactez un coach si une correction est nécessaire.</div>
             </div>
-          </div>
+          )}
 
           <div className="mb-4">
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Groupe</label>
@@ -1380,7 +1416,12 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
           </div>
           
           <button 
-            onClick={() => onSave({ first_name: firstName, last_name: lastName, position: pos, category })}
+            onClick={() => {
+              const payload = profile?.role === 'coach' 
+                ? { first_name: firstName, last_name: lastName, position: pos, category }
+                : { position: pos, category };
+              onSave(payload);
+            }}
             className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-200 mt-6"
           >
             Enregistrer
@@ -1478,28 +1519,85 @@ export default function App() {
   const handleLogin = async (userData) => {
       if (!user) return;
       setIsLoading(true);
-      const userProfileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-      const publicSummaryRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', userData.email);
+      try {
+        const providedEmail = (userData.email || '').trim();
+        const userProfileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
+        const emailProfileRef = doc(db, 'artifacts', appId, 'users_by_email', providedEmail);
+        const publicSummaryRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', providedEmail);
 
-      const snap = await getDoc(userProfileRef);
-      const existingData = snap.exists() ? snap.data() : {};
+        const [snapEmailProfile, snapUserProfile, snapPublic] = await Promise.all([
+          getDoc(emailProfileRef),
+          getDoc(userProfileRef),
+          getDoc(publicSummaryRef)
+        ]);
+        const existingEmailProfile = snapEmailProfile.exists() ? snapEmailProfile.data() : null;
+        const existingUserProfile = snapUserProfile.exists() ? snapUserProfile.data() : null;
+        const existingPublic = snapPublic?.exists() ? snapPublic.data() : null;
 
-      const newProfileData = {
-          email: userData.email,
-          first_name: userData.first_name || '',
-          last_name: userData.last_name || '',
-          full_name: `${userData.first_name} ${userData.last_name}`, // Keep for backup
-          role: userData.role,
-          position: userData.position,
-          category: userData.category || 'avant',
-          created_at: serverTimestamp(),
-          arrival_date: existingData.arrival_date || new Date().toISOString().split('T')[0] 
-      };
+        if (userData.isRegistering) {
+          // Nouveau compte : on repart de zéro avec les valeurs saisies
+          const newProfileData = {
+            email: providedEmail,
+            role: userData.role,
+            first_name: userData.first_name || '',
+            last_name: userData.last_name || '',
+            full_name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+            position: userData.position || '',
+            category: userData.category || 'avant',
+            created_at: serverTimestamp(),
+            arrival_date: new Date().toISOString().split('T')[0],
+            password_hash: hashPassword(userData.password || '')
+          };
 
-      await setDoc(userProfileRef, newProfileData, { merge: true });
-      await setDoc(publicSummaryRef, { ...newProfileData, id: userData.email }, { merge: true });
-      
-      setView(userData.role === 'coach' ? 'stats' : 'dashboard');
+          await Promise.all([
+            setDoc(userProfileRef, newProfileData), // pas de merge pour éliminer d’anciennes données
+            setDoc(emailProfileRef, newProfileData), // doc stable par email pour la connexion
+            setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }) // pas de mot de passe dans le résumé public
+          ]);
+          setView(newProfileData.role === 'coach' ? 'stats' : 'dashboard');
+          return;
+        }
+
+        // Connexion : un profil doit déjà exister
+        if (!existingEmailProfile && !existingPublic && !existingUserProfile) {
+          throw new Error('Profil introuvable. Vérifie tes identifiants ou passe en inscription.');
+        }
+
+        // Vérifier le mot de passe
+        const profileData = existingEmailProfile || existingUserProfile || {};
+        if (!profileData.password_hash) {
+          throw new Error('Mot de passe non défini. Repasse par "Inscription" avec cet email pour le définir.');
+        }
+        const providedHash = hashPassword(userData.password || '');
+        if (providedHash !== profileData.password_hash) {
+          throw new Error('Identifiants invalides.');
+        }
+
+        // Mise à jour minimale pour garder les infos existantes, sans résidus ni diffusion du hash
+        const { password_hash, email_normalized, ...cleanBase } = { ...existingPublic, ...existingUserProfile, ...existingEmailProfile, password_hash: profileData.password_hash };
+        const mergedFirstName = cleanBase.first_name || profileData.first_name || '';
+        const mergedLastName = cleanBase.last_name || profileData.last_name || '';
+        const newProfileData = {
+            ...cleanBase,
+            email: providedEmail || cleanBase.email || '',
+            first_name: mergedFirstName,
+            last_name: mergedLastName,
+            full_name: (mergedFirstName || mergedLastName) ? `${mergedFirstName} ${mergedLastName}`.trim() : (cleanBase.full_name || ''),
+            password_hash: profileData.password_hash
+        };
+
+        await Promise.all([
+          setDoc(userProfileRef, newProfileData, { merge: true }),
+          setDoc(emailProfileRef, newProfileData, { merge: true }),
+          setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }, { merge: true })
+        ]);
+        
+        setView(newProfileData.role === 'coach' ? 'stats' : 'dashboard');
+      } catch (err) {
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
   };
 
   const handleLogout = async () => {
@@ -1554,8 +1652,8 @@ export default function App() {
 
   const handleUpdateProfile = async (newData) => {
     // Construct full_name for backward compat
-    const full_name = `${newData.first_name} ${newData.last_name}`;
-    const dataToSave = { ...newData, full_name };
+    const full_name = newData.first_name || newData.last_name ? `${newData.first_name || ''} ${newData.last_name || ''}`.trim() : undefined;
+    const dataToSave = full_name ? { ...newData, full_name } : { ...newData };
 
     await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main'), dataToSave, { merge: true });
     if (profile.email) {
