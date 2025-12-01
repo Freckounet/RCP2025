@@ -1276,15 +1276,15 @@ const CoachDashboard = ({ events, attendances, allProfiles, seasons }) => {
           <button 
              key={player.id} 
              onClick={() => setSelectedPlayer(player)}
-             className="w-full bg-zinc-900/50 border border-zinc-800/50 p-4 rounded-xl flex items-center justify-between hover:bg-zinc-900 hover:border-zinc-700 transition-all text-left group"
+             className="w-full bg-zinc-900/50 border border-zinc-800/50 p-3 md:p-4 rounded-xl flex items-center justify-between hover:bg-zinc-900 hover:border-zinc-700 transition-all text-left group"
           >
-            <div className="flex items-center gap-4">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm transition-colors ${idx < 3 ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700 group-hover:text-white'}`}>
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-black text-xs md:text-sm transition-colors ${idx < 3 ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700 group-hover:text-white'}`}>
                 {idx + 1}
               </div>
               <div>
-                <div className="font-bold text-white group-hover:text-red-500 transition-colors">{getFullName(player)}</div>
-                <div className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-2">
+                <div className="font-bold text-white group-hover:text-red-500 transition-colors text-sm md:text-base whitespace-nowrap overflow-hidden text-ellipsis">{getFullName(player)}</div>
+                <div className="text-[9px] md:text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-2 md:gap-3">
                     {player.category === 'avant' ? <span className="text-red-500">AVANT</span> : player.category === '3/4' ? <span className="text-blue-500">3/4</span> : null}
                     {player.position && <span>• {player.position}</span>}
                     {player.arrival_date && <span className="text-zinc-600 font-normal normal-case">• Arrivé {new Date(player.arrival_date).toLocaleDateString()}</span>}
@@ -1292,18 +1292,18 @@ const CoachDashboard = ({ events, attendances, allProfiles, seasons }) => {
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
-               <div className="hidden sm:flex h-1.5 w-24 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="flex items-center gap-3 md:gap-4">
+               <div className="hidden sm:flex h-1.5 w-16 md:w-24 bg-zinc-800 rounded-full overflow-hidden">
                   <div className="h-full bg-green-500" style={{ width: player.total > 0 ? `${(player.present / player.total) * 100}%` : '0%' }}></div>
                   <div className="h-full bg-orange-500" style={{ width: player.total > 0 ? `${(player.injured / player.total) * 100}%` : '0%' }}></div>
                   <div className="h-full bg-red-500" style={{ width: player.total > 0 ? `${(player.absent / player.total) * 100}%` : '0%' }}></div>
                </div>
 
                <div className="text-right">
-                 <div className={`font-black text-lg ${player.rate > 75 ? 'text-green-500' : player.rate > 50 ? 'text-yellow-500' : 'text-red-500'}`}>
+                 <div className={`font-black text-base md:text-lg ${player.rate > 75 ? 'text-green-500' : player.rate > 50 ? 'text-yellow-500' : 'text-red-500'}`}>
                    {player.rate}%
                  </div>
-                 <div className="text-[9px] text-zinc-600 uppercase font-bold text-right flex items-center justify-end gap-1">
+                 <div className="text-[9px] text-zinc-600 uppercase font-bold text-right flex items-center justify-end gap-1 md:gap-1.5">
                    {player.noResponse > 0 && <span className="text-zinc-500 flex items-center gap-0.5"><HelpCircle size={8} /> {player.noResponse}</span>}
                    <span>{player.present}/{player.effectiveTotal}</span>
                  </div>
@@ -1454,6 +1454,7 @@ export default function App() {
   
   const [showPastEvents, setShowPastEvents] = useState(false);
   const [showFutureEvents, setShowFutureEvents] = useState(false);
+  const initialViewSetRef = useRef(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -1486,6 +1487,17 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Garantit que l'arrivée après login se fait sur l'agenda
+  useEffect(() => {
+    if (profile && !initialViewSetRef.current) {
+      setView('dashboard');
+      initialViewSetRef.current = true;
+    } else if (!profile) {
+      initialViewSetRef.current = false;
+      setView('dashboard');
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!user || !profile) return;
@@ -1557,7 +1569,7 @@ export default function App() {
             setDoc(emailProfileRef, newProfileData), // doc stable par email pour la connexion
             setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }) // pas de mot de passe dans le résumé public
           ]);
-          setView(newProfileData.role === 'coach' ? 'stats' : 'dashboard');
+          setView('dashboard'); // Toujours ouvrir sur l'agenda après inscription
           return;
         }
 
@@ -1595,7 +1607,7 @@ export default function App() {
           setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }, { merge: true })
         ]);
         
-        setView(newProfileData.role === 'coach' ? 'stats' : 'dashboard');
+        setView('dashboard'); // Toujours ouvrir sur l'agenda après connexion
       } catch (err) {
         throw err;
       } finally {
