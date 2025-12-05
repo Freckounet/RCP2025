@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { 
   getFirestore, collection, doc, setDoc, addDoc, onSnapshot, 
-  query, orderBy, deleteDoc, updateDoc, serverTimestamp, getDoc, where 
+  query, orderBy, deleteDoc, updateDoc, serverTimestamp, getDoc 
 } from 'firebase/firestore';
 import { 
-  Calendar, MapPin, CheckCircle2, XCircle, AlertCircle, 
-  Plus, Users, BarChart3, Shield, LogOut, ChevronRight, ChevronLeft, ChevronDown, Activity, User, Lock, Clock, Filter, HelpCircle, X, ClipboardList, GripVertical, Swords, Settings, Crown, CalendarDays, Save, Check, Edit3, Trash2, Share2, Copy, MousePointer2 
+  Calendar, MapPin, CheckCircle2, XCircle, 
+  Plus, Users, BarChart3, Shield, LogOut, ChevronRight, ChevronLeft, ChevronDown, Activity, User, Lock, Clock, HelpCircle, X, ClipboardList, GripVertical, Swords, Crown, CalendarDays, Check, Edit3, Share2, Copy, MousePointer2, Trash2 
 } from 'lucide-react';
 import { deleteField } from 'firebase/firestore';
+import LogoRCP from './assets/Logo RCP.png';
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
@@ -65,8 +66,8 @@ const getStatusLabel = (status) => {
 const hashPassword = (pwd) => {
     if (!pwd) return '';
     if (typeof btoa === 'function') return btoa(pwd);
-    if (typeof Buffer !== 'undefined') {
-      return Buffer.from(pwd, 'utf-8').toString('base64');
+    if (typeof globalThis !== 'undefined' && globalThis.Buffer) {
+      return globalThis.Buffer.from(pwd, 'utf-8').toString('base64');
     }
     return '';
 };
@@ -120,12 +121,12 @@ const AuthScreen = ({ onLogin }) => {
 
       <div className="w-full max-w-md space-y-8 relative z-10">
         <div className="text-center">
-          <div className="relative w-28 h-28 mx-auto mb-6 animate-float">
-             <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-red-500 via-amber-400 to-red-600 blur-xl opacity-60 animate-[spin_12s_linear_infinite]"></div>
-             <div className="absolute inset-2 rounded-3xl bg-red-600 blur-md opacity-70 animate-pulse"></div>
-             <div className="relative w-full h-full bg-red-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-red-900/50 transform rotate-3 transition-transform duration-500 hover:scale-105 hover:-rotate-1">
-                <span className="text-4xl font-black text-black tracking-tighter drop-shadow-[0_4px_20px_rgba(0,0,0,0.45)]">RCP</span>
-             </div>
+          <div className="relative w-32 h-32 mx-auto mb-6 animate-float flex items-center justify-center">
+             <img 
+               src={LogoRCP} 
+               alt="Logo Rugby Club Portois" 
+               className="w-32 h-32 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.35)]" 
+             />
           </div>
           <h2 className="text-4xl font-black text-white tracking-tight">Rugby Club Portois</h2>
         </div>
@@ -240,7 +241,7 @@ const AuthScreen = ({ onLogin }) => {
 
 // --- APP COMPONENTS ---
 
-const Navbar = ({ user, profile, setView, currentView, onLogout }) => (
+const Navbar = ({ profile, setView, currentView }) => (
   <nav className="fixed bottom-0 left-0 right-0 md:top-0 md:bottom-auto bg-zinc-950/90 backdrop-blur-md border-t md:border-b md:border-t-0 border-zinc-800 z-50 px-4 py-3 md:py-4">
     <div className="max-w-4xl mx-auto flex justify-between items-center">
       <div className="flex items-center gap-3">
@@ -350,7 +351,6 @@ const WeeklySummaryModal = ({ events, onClose }) => {
                 if (e.type === 'match') {
                     text += `Match ${e.opponent ? 'contre ' + e.opponent : ''} ${e.location ? 'à ' + e.location : ''}.\nCoup d'envoi à ${e.time}.\n\n`;
                 } else {
-                    let endStr = "21h30";
                     if (e.time) {
                         const [h, m] = e.time.split(':').map(Number);
                         const endH = (h + 2) % 24;
@@ -659,10 +659,30 @@ const EventCard = ({ event, userEmail, attendances, onUpdateStatus, onDelete, is
 };
 
 // MODIFIED: SquadManagement to include First/Last name and Category
-const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer }) => {
+const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, onDeletePlayer }) => {
     const [editingSeason, setEditingSeason] = useState(null);
     const [newSeason, setNewSeason] = useState({ name: '', start: '', end: '' });
     const [isAdding, setIsAdding] = useState(false);
+    const [editTarget, setEditTarget] = useState(null);
+    const [editForm, setEditForm] = useState({ first_name: '', last_name: '', category: 'avant', position: '', role: 'player', arrival_date: '', birth_date: '', phone: '' });
+    const ageStats = useMemo(() => {
+        const now = new Date();
+        const ages = allProfiles
+            .filter(p => p.role === 'player' && p.birth_date)
+            .map(p => {
+                const d = new Date(p.birth_date);
+                if (Number.isNaN(d.getTime())) return null;
+                let age = now.getFullYear() - d.getFullYear();
+                const hasHadBirthday = (now.getMonth() > d.getMonth()) || (now.getMonth() === d.getMonth() && now.getDate() >= d.getDate());
+                if (!hasHadBirthday) age -= 1;
+                return age;
+            })
+            .filter((a) => a !== null);
+
+        if (!ages.length) return { average: null, count: 0 };
+        const avg = ages.reduce((sum, a) => sum + a, 0) / ages.length;
+        return { average: Math.round(avg * 10) / 10, count: ages.length };
+    }, [allProfiles]);
 
     const handleCreate = () => {
         if (!newSeason.name || !newSeason.start || !newSeason.end) return;
@@ -676,6 +696,34 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer })
         setEditingSeason(null);
     };
 
+    const openEdit = (profile) => {
+        setEditTarget(profile);
+        setEditForm({
+            first_name: profile.first_name || '',
+            last_name: profile.last_name || '',
+            category: profile.category || 'avant',
+            position: profile.position || '',
+            role: profile.role || 'player',
+            arrival_date: profile.arrival_date || '',
+            birth_date: profile.birth_date || '',
+            phone: profile.phone || '',
+        });
+    };
+
+    const saveEdit = () => {
+        if (!editTarget) return;
+        onUpdatePlayer(editTarget.id, editForm);
+        setEditTarget(null);
+    };
+
+    const confirmDelete = () => {
+        if (!editTarget) return;
+        if (window.confirm('Supprimer ce joueur ?')) {
+            onDeletePlayer(editTarget.id);
+            setEditTarget(null);
+        }
+    };
+
     return (
         <div className="pb-24 pt-4 px-4 max-w-4xl mx-auto animate-in fade-in">
             <div className="flex items-center justify-between mb-6">
@@ -684,76 +732,144 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer })
                 </h2>
             </div>
 
-            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Membres du Club ({allProfiles.length})</h3>
             <div className="space-y-3 mb-10">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">Membres du Club ({allProfiles.length})</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
                 {allProfiles.map(profile => (
-                    <div key={profile.id} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4 group hover:border-zinc-700 transition-all">
-                         <div className="flex flex-col md:flex-row md:items-center gap-4">
-                             <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl flex-shrink-0 ${profile.role === 'coach' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
-                                 {profile.first_name ? profile.first_name.charAt(0) : (profile.full_name?.charAt(0) || '?')}
-                             </div>
-                             
-                             {/* UPDATE: Changed grid columns to accommodate arrival date */}
-                             <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                                 <div className="col-span-2 md:col-span-1">
-                                    <label className="text-[9px] uppercase font-bold text-zinc-600 mb-1 block">Prénom</label>
-                                    <input 
-                                        value={profile.first_name || ''}
-                                        onChange={(e) => onUpdatePlayer(profile.id, { first_name: e.target.value })}
-                                        placeholder="Prénom"
-                                        className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-sm text-white outline-none focus:border-zinc-600"
-                                    />
-                                 </div>
-                                 <div className="col-span-2 md:col-span-1">
-                                    <label className="text-[9px] uppercase font-bold text-zinc-600 mb-1 block">Nom</label>
-                                    <input 
-                                        value={profile.last_name || ''}
-                                        onChange={(e) => onUpdatePlayer(profile.id, { last_name: e.target.value })}
-                                        placeholder="Nom"
-                                        className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-sm text-white outline-none focus:border-zinc-600"
-                                    />
-                                 </div>
-                                 
-                                 <div>
-                                    <label className="text-[9px] uppercase font-bold text-zinc-600 mb-1 block">Groupe</label>
-                                    <select 
-                                        value={profile.category || 'avant'}
-                                        onChange={(e) => onUpdatePlayer(profile.id, { category: e.target.value })}
-                                        className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-sm text-white outline-none focus:border-zinc-600"
-                                    >
-                                        <option value="avant">Avants</option>
-                                        <option value="3/4">3/4 (Arrières)</option>
-                                        <option value="staff">Staff</option>
-                                    </select>
-                                 </div>
-
-                                 {/* ADDED: Arrival Date Input */}
-                                 <div>
-                                    <label className="text-[9px] uppercase font-bold text-zinc-600 mb-1 block">Arrivée</label>
-                                    <input 
-                                        type="date"
-                                        value={profile.arrival_date || ''}
-                                        onChange={(e) => onUpdatePlayer(profile.id, { arrival_date: e.target.value })}
-                                        className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white outline-none focus:border-zinc-600"
-                                    />
-                                 </div>
-
-                                 <div>
-                                    <label className="text-[9px] uppercase font-bold text-zinc-600 mb-1 block">Rôle App</label>
-                                    <select 
-                                        value={profile.role}
-                                        onChange={(e) => onUpdatePlayer(profile.id, { role: e.target.value })}
-                                        className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white outline-none focus:border-zinc-600"
-                                    >
-                                        <option value="player">Joueur</option>
-                                        <option value="coach">Coach</option>
-                                    </select>
-                                 </div>
-                             </div>
-                         </div>
+                    <div key={profile.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between hover:border-zinc-700 transition-all">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg flex-shrink-0 ${profile.role === 'coach' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-300'}`}>
+                                {profile.first_name ? profile.first_name.charAt(0) : (profile.full_name?.charAt(0) || '?')}
+                            </div>
+                            <div className="min-w-0">
+                                <div className="font-bold text-white text-sm truncate">{getFullName(profile)}</div>
+                                <div className="text-[10px] uppercase text-zinc-500 font-bold">
+                                    {profile.role === 'coach' ? 'Coach' : 'Joueur'} {profile.category ? `• ${profile.category}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => openEdit(profile)}
+                            className="p-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                            title="Modifier ce profil"
+                        >
+                            <Edit3 size={16} />
+                        </button>
                     </div>
                 ))}
+              </div>
             </div>
+            {editTarget && (
+              <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl">
+                    <div className="flex items-start justify-between mb-4">
+                        <div>
+                            <div className="text-xs uppercase text-zinc-500 font-bold tracking-wider">Modifier</div>
+                            <div className="text-xl font-black text-white">{getFullName(editTarget)}</div>
+                        </div>
+                        <button onClick={() => setEditTarget(null)} className="p-2 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Prénom</label>
+                            <input 
+                                value={editForm.first_name}
+                                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Nom</label>
+                            <input 
+                                value={editForm.last_name}
+                                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Groupe</label>
+                            <select 
+                                value={editForm.category}
+                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            >
+                                <option value="avant">Avants</option>
+                                <option value="3/4">3/4 (Arrières)</option>
+                                <option value="staff">Staff</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Poste</label>
+                            <input 
+                                value={editForm.position}
+                                onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Arrivée</label>
+                            <input 
+                                type="date"
+                                value={editForm.arrival_date}
+                                onChange={(e) => setEditForm({ ...editForm, arrival_date: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Naissance</label>
+                            <input 
+                                type="date"
+                                value={editForm.birth_date}
+                                onChange={(e) => setEditForm({ ...editForm, birth_date: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Téléphone</label>
+                            <input 
+                                type="tel"
+                                value={editForm.phone}
+                                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Rôle</label>
+                            <select 
+                                value={editForm.role}
+                                onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
+                            >
+                                <option value="player">Joueur</option>
+                                <option value="coach">Coach</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                        <button 
+                            onClick={confirmDelete}
+                            className="flex items-center gap-2 text-red-500 font-bold text-sm px-3 py-2 rounded-lg hover:bg-red-950/30 border border-transparent hover:border-red-900 transition-colors"
+                        >
+                            <Trash2 size={16} /> Supprimer le joueur
+                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setEditTarget(null)} className="px-4 py-2 text-sm font-bold text-zinc-500 hover:text-white">Annuler</button>
+                            <button onClick={saveEdit} className="px-4 py-2 bg-white text-black rounded-lg text-sm font-bold hover:bg-zinc-200">Enregistrer</button>
+                        </div>
+                    </div>
+                </div>
+              </div>
+            )}
+
+            {ageStats.average !== null && (
+              <div className="text-right text-sm text-zinc-300 font-bold bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3 mb-10">
+                  Moyenne d'âge (sur {ageStats.count} joueurs) : <span className="text-white">{ageStats.average.toString().replace('.', ',')}</span> ans
+              </div>
+            )}
 
             <div className="flex items-center justify-between mb-4">
                  <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
@@ -854,10 +970,31 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer })
 };
 
 const PresenceValidation = ({ events, attendances, allProfiles, onStatusChange }) => {
-    const [selectedEventId, setSelectedEventId] = useState(events.length > 0 ? events[0].id : null);
+    const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [movingPlayerId, setMovingPlayerId] = useState(null); // NEW: State for mobile selection
     
     const sortedEvents = [...events].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    useEffect(() => {
+        if (!events.length) {
+            setSelectedEventId(null);
+            return;
+        }
+        const today = new Date();
+        const isSameDay = (d1: Date, d2: Date) => 
+            d1.getFullYear() === d2.getFullYear() &&
+            d1.getMonth() === d2.getMonth() &&
+            d1.getDate() === d2.getDate();
+
+        const todayTraining = events.find((e) => e.type === 'training' && isSameDay(new Date(e.date), today));
+        if (todayTraining) {
+            setSelectedEventId(todayTraining.id);
+            return;
+        }
+
+        const upcoming = [...events].sort((a, b) => new Date(a.date) - new Date(b.date)).find((e) => new Date(e.date) >= today);
+        setSelectedEventId((upcoming || events[0]).id);
+    }, [events]);
 
     const columns = useMemo(() => {
         const cols = { present: [], absent: [], injured: [], no_response: [] };
@@ -1017,6 +1154,12 @@ const PlayerDetailModal = ({ player, events, attendances, onClose }) => {
                 </div>
                 {player.arrival_date && (
                     <div className="text-green-600 text-[10px] mt-1 font-bold">Arrivé le {formatDate(player.arrival_date)}</div>
+                )}
+                {player.birth_date && (
+                    <div className="text-zinc-400 text-xs mt-1 flex items-center gap-2">
+                        <CalendarDays size={14} className="text-zinc-500" />
+                        <span>Né le {new Date(player.birth_date).toLocaleDateString('fr-FR')}</span>
+                    </div>
                 )}
              </div>
           </div>
@@ -1335,6 +1478,8 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
   const [lastName, setLastName] = useState(profile?.last_name || '');
   const [pos, setPos] = useState(profile?.position || '');
   const [category, setCategory] = useState(profile?.category || 'avant');
+  const [birthDate, setBirthDate] = useState(profile?.birth_date || '');
+  const [phone, setPhone] = useState(profile?.phone || '');
 
   // Handle migration if only full_name exists
   useEffect(() => {
@@ -1345,7 +1490,7 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
              setLastName(parts.slice(1).join(' '));
          }
      }
-  }, [profile]);
+  }, [profile, firstName, lastName]);
   
   return (
     <div className="pb-24 pt-8 px-4 max-w-md mx-auto animate-in fade-in">
@@ -1417,12 +1562,33 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
               className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
             />
           </div>
+
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Téléphone</label>
+            <input 
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="06 12 34 56 78"
+              className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Date de naissance</label>
+            <input 
+              type="date"
+              value={birthDate}
+              onChange={e => setBirthDate(e.target.value)}
+              className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
+            />
+          </div>
           
           <button 
             onClick={() => {
               const payload = profile?.role === 'coach' 
-                ? { first_name: firstName, last_name: lastName, position: pos, category }
-                : { position: pos, category };
+                ? { first_name: firstName, last_name: lastName, position: pos, category, birth_date: birthDate, phone }
+                : { position: pos, category, birth_date: birthDate, phone };
               onSave(payload);
             }}
             className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-200 mt-6"
@@ -1458,8 +1624,12 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
+      const initialToken = typeof globalThis !== 'undefined'
+        ? (globalThis as { __initial_auth_token?: string }).__initial_auth_token
+        : undefined;
+
+      if (initialToken) {
+        await signInWithCustomToken(auth, initialToken);
       } else {
         await signInAnonymously(auth);
       }
@@ -1501,8 +1671,6 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !profile) return;
-    if (view === 'dashboard' && profile.role === 'coach' && events.length === 0) {}
-
     const eventsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'events'), orderBy('date', 'asc'));
     const unsubEvents = onSnapshot(eventsQuery, (snapshot) => {
       setEvents(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -1529,7 +1697,7 @@ export default function App() {
       unsubAllProfiles();
       unsubSeasons();
     };
-  }, [user, profile]);
+  }, [user, profile, view, events.length]);
 
   const handleLogin = async (userData) => {
       if (!user) return;
@@ -1551,18 +1719,20 @@ export default function App() {
 
         if (userData.isRegistering) {
           // Nouveau compte : on repart de zéro avec les valeurs saisies
-          const newProfileData = {
-            email: providedEmail,
-            role: userData.role,
-            first_name: userData.first_name || '',
-            last_name: userData.last_name || '',
-            full_name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
-            position: userData.position || '',
-            category: userData.category || 'avant',
-            created_at: serverTimestamp(),
-            arrival_date: new Date().toISOString().split('T')[0],
-            password_hash: hashPassword(userData.password || '')
-          };
+        const newProfileData = {
+          email: providedEmail,
+          role: userData.role,
+          first_name: userData.first_name || '',
+          last_name: userData.last_name || '',
+          full_name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+          position: userData.position || '',
+          category: userData.category || 'avant',
+          created_at: serverTimestamp(),
+          arrival_date: new Date().toISOString().split('T')[0],
+          birth_date: userData.birth_date || '',
+          phone: userData.phone || '',
+          password_hash: hashPassword(userData.password || '')
+        };
 
           await Promise.all([
             setDoc(userProfileRef, newProfileData), // pas de merge pour éliminer d’anciennes données
@@ -1589,7 +1759,10 @@ export default function App() {
         }
 
         // Mise à jour minimale pour garder les infos existantes, sans résidus ni diffusion du hash
-        const { password_hash, email_normalized, ...cleanBase } = { ...existingPublic, ...existingUserProfile, ...existingEmailProfile, password_hash: profileData.password_hash };
+        const mergedProfile = { ...existingPublic, ...existingUserProfile, ...existingEmailProfile, password_hash: profileData.password_hash };
+        const { password_hash: existingHash, ...cleanBase } = mergedProfile;
+        delete (cleanBase as Record<string, unknown>).email_normalized;
+
         const mergedFirstName = cleanBase.first_name || profileData.first_name || '';
         const mergedLastName = cleanBase.last_name || profileData.last_name || '';
         const newProfileData = {
@@ -1598,7 +1771,9 @@ export default function App() {
             first_name: mergedFirstName,
             last_name: mergedLastName,
             full_name: (mergedFirstName || mergedLastName) ? `${mergedFirstName} ${mergedLastName}`.trim() : (cleanBase.full_name || ''),
-            password_hash: profileData.password_hash
+            birth_date: profileData.birth_date || cleanBase.birth_date || '',
+            phone: profileData.phone || cleanBase.phone || '',
+            password_hash: existingHash
         };
 
         await Promise.all([
@@ -1608,8 +1783,6 @@ export default function App() {
         ]);
         
         setView('dashboard'); // Toujours ouvrir sur l'agenda après connexion
-      } catch (err) {
-        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -1683,11 +1856,21 @@ export default function App() {
       if (updates.first_name || updates.last_name) {
            // We'd need current data to reconstruct perfectly, but this simple merge might be risky for partial updates.
            // However, for this UI, we usually have both.
+           const firstName = updates.first_name ?? '';
+           const lastName = updates.last_name ?? '';
+           enrichedUpdates.full_name = `${firstName} ${lastName}`.trim();
       }
 
       await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', targetId), enrichedUpdates);
       if (targetId === profile.email) {
            await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main'), enrichedUpdates);
+      }
+  };
+
+  const handleAdminDeletePlayer = async (targetId) => {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', targetId));
+      if (targetId === profile.email) {
+          await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main'));
       }
   };
 
@@ -1739,7 +1922,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-zinc-100 selection:bg-red-900 selection:text-white pb-20 md:pb-0">
-      <Navbar user={user} profile={profile} setView={setView} currentView={view} onLogout={handleLogout} />
+      <Navbar profile={profile} setView={setView} currentView={view} />
       <main className="pt-4 md:pt-20">
         {view === 'dashboard' && (
           <div className="px-4 max-w-4xl mx-auto animate-in fade-in">
@@ -1874,6 +2057,7 @@ export default function App() {
                 seasons={seasons} 
                 onSaveSeason={handleSaveSeason} 
                 onUpdatePlayer={handleAdminUpdatePlayer} 
+                onDeletePlayer={handleAdminDeletePlayer}
             />
         )}
         {view === 'profile' && (
