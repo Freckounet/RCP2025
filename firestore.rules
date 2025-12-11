@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Helpers ---
+    function appId() { return "rcp-app-v1"; }
+    function isSignedIn() { return request.auth != null; }
+    function userProfile(uid) {
+      return get(/databases/$(database)/documents/artifacts/$(appId())/users/$(uid)/profile/main);
+    }
+    function userRole() {
+      return userProfile(request.auth.uid).data.role;
+    }
+    function isCoach() { return userRole() == "coach"; }
+    function userEmail() { return userProfile(request.auth.uid).data.email; }
+    function isOwnerEmail(email) { return userEmail() != null && email == userEmail(); }
+    function isSelfAttendance() {
+      let newUserId = request.resource.data.user_id;
+      let existingUserId = resource == null ? null : resource.data.user_id;
+      return (newUserId == request.auth.uid || newUserId == userEmail()) &&
+             (existingUserId == null || existingUserId == request.auth.uid || existingUserId == userEmail());
+    }
+
+    // --- Public data ---
+    match /artifacts/{app}/public/data/events/{eventId} {
+      allow read: if isSignedIn() && app == appId();
+      allow create, update, delete: if isSignedIn() && app == appId() && isCoach();
+    }
+
+    match /artifacts/{app}/public/data/attendance/{attId} {
+      allow read: if isSignedIn() && app == appId();
+      allow create, update, delete: if isSignedIn() && app == appId() && (isCoach() || isSelfAttendance());
+    }
+
+    match /artifacts/{app}/public/data/user_summaries/{email} {
+      allow read: if isSignedIn() && app == appId();
+      allow create, update, delete: if isSignedIn() && app == appId() && (isCoach() || isOwnerEmail(email));
+    }
+
+    match /artifacts/{app}/public/data/seasons/{seasonId} {
+      allow read: if isSignedIn() && app == appId();
+      allow create, update, delete: if isSignedIn() && app == appId() && isCoach();
+    }
+
+    // --- Private user profiles ---
+    match /artifacts/{app}/users/{uid}/profile/{docId} {
+      allow read, write: if isSignedIn() && app == appId() && uid == request.auth.uid;
+    }
+
+    // Deny all other access by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

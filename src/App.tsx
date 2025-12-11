@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { 
   getFirestore, collection, doc, setDoc, addDoc, onSnapshot, 
   query, orderBy, deleteDoc, updateDoc, serverTimestamp, getDoc 
@@ -9,7 +9,6 @@ import {
   Calendar, MapPin, CheckCircle2, XCircle, 
   Plus, Users, BarChart3, Shield, LogOut, ChevronRight, ChevronLeft, ChevronDown, Activity, User, Lock, Clock, HelpCircle, X, ClipboardList, GripVertical, Swords, Crown, CalendarDays, Check, Edit3, Share2, Copy, MousePointer2, Trash2 
 } from 'lucide-react';
-import { deleteField } from 'firebase/firestore';
 import LogoRCP from './assets/Logo RCP.png';
 
 // --- FIREBASE CONFIGURATION ---
@@ -62,14 +61,25 @@ const getStatusLabel = (status) => {
     }
 };
 
-// Hash basique pour stocker un mot de passe sans le conserver en clair
-const hashPassword = (pwd) => {
-    if (!pwd) return '';
-    if (typeof btoa === 'function') return btoa(pwd);
-    if (typeof globalThis !== 'undefined' && globalThis.Buffer) {
-      return globalThis.Buffer.from(pwd, 'utf-8').toString('base64');
+const mapAuthError = (err) => {
+    const code = err?.code || '';
+    switch (code) {
+      case 'auth/email-already-in-use':
+        return 'Un compte existe déjà avec cet email. Essayez de vous connecter.';
+      case 'auth/invalid-email':
+        return 'Email invalide.';
+      case 'auth/missing-password':
+      case 'auth/weak-password':
+        return 'Mot de passe trop court (6 caractères minimum).';
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
+      case 'auth/wrong-password':
+        return 'Identifiants incorrects.';
+      case 'auth/user-not-found':
+        return 'Aucun compte trouvé avec cet email. Passez par Inscription.';
+      default:
+        return err?.message || 'Impossible de se connecter pour le moment.';
     }
-    return '';
 };
 
 // --- AUTH COMPONENT ---
@@ -81,13 +91,6 @@ const AuthScreen = ({ onLogin }) => {
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
 
-  const demoProfiles = [
-    { label: 'Coach', email: 'coach@rcp.com', role: 'coach', fname: 'Coach', lname: 'Principal', position: 'Staff', category: 'staff' },
-    { label: 'Joueur 1', email: 'joueur1@rcp.com', role: 'player', fname: 'Antoine', lname: 'Dupont', position: 'Demi de mêlée', category: '3/4' },
-    { label: 'Joueur 2', email: 'joueur2@rcp.com', role: 'player', fname: 'Romain', lname: 'Ntamack', position: 'Demi d\'ouverture', category: '3/4' },
-    { label: 'Joueur 3', email: 'joueur3@rcp.com', role: 'player', fname: 'Cyril', lname: 'Baille', position: 'Pilier', category: 'avant' },
-  ];
-
   const handleStandardSubmit = (e) => {
     e.preventDefault();
     setError('');
@@ -95,8 +98,8 @@ const AuthScreen = ({ onLogin }) => {
       setError('Merci de saisir email et mot de passe.');
       return;
     }
-    if (isRegistering && password.length < 4) {
-      setError('Mot de passe trop court (4 caractères min).');
+    if (isRegistering && password.length < 6) {
+      setError('Mot de passe trop court (6 caractères min pour la création de compte).');
       return;
     }
     const normalizedEmail = email.trim().toLowerCase();
@@ -105,13 +108,13 @@ const AuthScreen = ({ onLogin }) => {
         role: 'player',
         first_name: firstName,
         last_name: lastName,
-        position: 'Nouveau',
         category: 'avant', // Default
         isNew: isRegistering,
         isRegistering,
         password
     }).catch((err) => {
-      setError(err.message || 'Impossible de se connecter.');
+      const msg = mapAuthError(err);
+      setError(msg);
     });
   };
 
@@ -129,30 +132,6 @@ const AuthScreen = ({ onLogin }) => {
              />
           </div>
           <h2 className="text-4xl font-black text-white tracking-tight">Rugby Club Portois</h2>
-        </div>
-
-        <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-6 rounded-2xl">
-           <div className="flex items-center gap-2 mb-4">
-             <div className="h-1 w-1 rounded-full bg-red-500 animate-pulse"></div>
-             <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Accès Démo Rapide</h3>
-           </div>
-           
-              <div className="grid grid-cols-2 gap-3">
-              {demoProfiles.map((p, i) => (
-                <button 
-                  key={i}
-                  onClick={() => onLogin({ first_name: p.fname, last_name: p.lname, email: p.email.toLowerCase(), role: p.role, position: p.position, category: p.category, isRegistering: true, password: 'demo' }).catch((err) => setError(err.message || 'Impossible de se connecter.'))}
-                  className={`p-3 rounded-xl border text-left transition-all group ${p.role === 'coach' ? 'bg-red-950/30 border-red-900/50 hover:bg-red-900/50 hover:border-red-600' : 'bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800 hover:border-zinc-500'}`}
-                >
-                   <div className="flex justify-between items-start mb-1">
-                      <div className={`text-[10px] font-bold uppercase tracking-wider ${p.role === 'coach' ? 'text-red-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}>{p.label}</div>
-                      {p.role === 'coach' && <Shield size={12} className="text-red-500" />}
-                   </div>
-                   <div className="text-sm font-bold text-white truncate">{p.fname} {p.lname}</div>
-                   <div className="text-[10px] text-zinc-500 truncate">{p.email}</div>
-                </button>
-              ))}
-           </div>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
@@ -664,7 +643,7 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
     const [newSeason, setNewSeason] = useState({ name: '', start: '', end: '' });
     const [isAdding, setIsAdding] = useState(false);
     const [editTarget, setEditTarget] = useState(null);
-    const [editForm, setEditForm] = useState({ first_name: '', last_name: '', category: 'avant', position: '', role: 'player', arrival_date: '', birth_date: '', phone: '' });
+    const [editForm, setEditForm] = useState({ first_name: '', last_name: '', category: 'avant', role: 'player', arrival_date: '', birth_date: '', phone: '' });
     const ageStats = useMemo(() => {
         const now = new Date();
         const ages = allProfiles
@@ -682,6 +661,15 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
         if (!ages.length) return { average: null, count: 0 };
         const avg = ages.reduce((sum, a) => sum + a, 0) / ages.length;
         return { average: Math.round(avg * 10) / 10, count: ages.length };
+    }, [allProfiles]);
+
+    const categoryStats = useMemo(() => {
+        const players = allProfiles.filter(p => p.role === 'player');
+        const total = players.length || 1;
+        const avants = players.filter(p => p.category === 'avant').length;
+        const backs = players.filter(p => p.category === '3/4').length;
+        const pct = (count) => Math.round((count / total) * 100);
+        return { total: players.length, avants, backs, avantsPct: pct(avants), backsPct: pct(backs) };
     }, [allProfiles]);
 
     const handleCreate = () => {
@@ -702,7 +690,6 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
             first_name: profile.first_name || '',
             last_name: profile.last_name || '',
             category: profile.category || 'avant',
-            position: profile.position || '',
             role: profile.role || 'player',
             arrival_date: profile.arrival_date || '',
             birth_date: profile.birth_date || '',
@@ -730,6 +717,27 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
                 <h2 className="text-2xl font-black text-white italic flex items-center gap-2">
                     <Users className="text-red-600" /> GESTION EFFECTIF
                 </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                    <div className="text-xs uppercase text-zinc-500 font-bold">Moyenne d'âge</div>
+                    <div className="text-white font-black text-lg">
+                        {ageStats.average !== null ? `${ageStats.average.toString().replace('.', ',')} ans` : 'N/A'}
+                    </div>
+                </div>
+                <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                    <div className="text-xs uppercase text-zinc-500 font-bold">Avants</div>
+                    <div className="text-white font-black text-lg">
+                        {categoryStats.avants} <span className="text-zinc-500 text-xs font-bold">({categoryStats.avantsPct}%)</span>
+                    </div>
+                </div>
+                <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                    <div className="text-xs uppercase text-zinc-500 font-bold">Arrières</div>
+                    <div className="text-white font-black text-lg">
+                        {categoryStats.backs} <span className="text-zinc-500 text-xs font-bold">({categoryStats.backsPct}%)</span>
+                    </div>
+                </div>
             </div>
 
             <div className="space-y-3 mb-10">
@@ -802,14 +810,6 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
                             </select>
                         </div>
                         <div>
-                            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Poste</label>
-                            <input 
-                                value={editForm.position}
-                                onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
-                                className="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-sm text-white focus:border-red-600 outline-none"
-                            />
-                        </div>
-                        <div>
                             <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Arrivée</label>
                             <input 
                                 type="date"
@@ -862,12 +862,6 @@ const SquadManagement = ({ allProfiles, seasons, onSaveSeason, onUpdatePlayer, o
                         </div>
                     </div>
                 </div>
-              </div>
-            )}
-
-            {ageStats.average !== null && (
-              <div className="text-right text-sm text-zinc-300 font-bold bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3 mb-10">
-                  Moyenne d'âge (sur {ageStats.count} joueurs) : <span className="text-white">{ageStats.average.toString().replace('.', ',')}</span> ans
               </div>
             )}
 
@@ -1076,7 +1070,6 @@ const PresenceValidation = ({ events, attendances, allProfiles, onStatusChange }
                                 <div className="font-bold text-white text-sm">{getFullName(player)}</div>
                                 <div className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">
                                     <span className="font-black text-zinc-400">{player.category === 'avant' ? 'AVANT' : player.category === '3/4' ? '3/4' : ''}</span>
-                                    {player.position && <span>• {player.position}</span>}
                                 </div>
                             </div>
                         </div>
@@ -1150,7 +1143,6 @@ const PlayerDetailModal = ({ player, events, attendances, onClose }) => {
                 <h2 className="text-2xl font-bold text-white leading-none">{getFullName(player)}</h2>
                 <div className="text-zinc-500 font-medium mt-1 uppercase tracking-wider text-xs flex items-center gap-2">
                     {player.category === 'avant' ? <span className="text-red-500 font-bold">AVANT</span> : player.category === '3/4' ? <span className="text-blue-500 font-bold">3/4</span> : null}
-                    <span>• {player.position}</span>
                 </div>
                 {player.arrival_date && (
                     <div className="text-green-600 text-[10px] mt-1 font-bold">Arrivé le {formatDate(player.arrival_date)}</div>
@@ -1429,7 +1421,6 @@ const CoachDashboard = ({ events, attendances, allProfiles, seasons }) => {
                 <div className="font-bold text-white group-hover:text-red-500 transition-colors text-sm md:text-base whitespace-nowrap overflow-hidden text-ellipsis">{getFullName(player)}</div>
                 <div className="text-[9px] md:text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-2 md:gap-3">
                     {player.category === 'avant' ? <span className="text-red-500">AVANT</span> : player.category === '3/4' ? <span className="text-blue-500">3/4</span> : null}
-                    {player.position && <span>• {player.position}</span>}
                     {player.arrival_date && <span className="text-zinc-600 font-normal normal-case">• Arrivé {new Date(player.arrival_date).toLocaleDateString()}</span>}
                 </div>
               </div>
@@ -1476,7 +1467,6 @@ const CoachDashboard = ({ events, attendances, allProfiles, seasons }) => {
 const ProfileEditor = ({ profile, onSave, onLogout }) => {
   const [firstName, setFirstName] = useState(profile?.first_name || '');
   const [lastName, setLastName] = useState(profile?.last_name || '');
-  const [pos, setPos] = useState(profile?.position || '');
   const [category, setCategory] = useState(profile?.category || 'avant');
   const [birthDate, setBirthDate] = useState(profile?.birth_date || '');
   const [phone, setPhone] = useState(profile?.phone || '');
@@ -1554,16 +1544,6 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
           </div>
           
           <div>
-            <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Poste Précis (Optionnel)</label>
-            <input 
-              value={pos} 
-              onChange={e => setPos(e.target.value)}
-              placeholder="Ex: Ailier, Pilier..."
-              className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white focus:border-red-600 outline-none"
-            />
-          </div>
-
-          <div>
             <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Téléphone</label>
             <input 
               type="tel"
@@ -1587,8 +1567,8 @@ const ProfileEditor = ({ profile, onSave, onLogout }) => {
           <button 
             onClick={() => {
               const payload = profile?.role === 'coach' 
-                ? { first_name: firstName, last_name: lastName, position: pos, category, birth_date: birthDate, phone }
-                : { position: pos, category, birth_date: birthDate, phone };
+                ? { first_name: firstName, last_name: lastName, category, birth_date: birthDate, phone }
+                : { category, birth_date: birthDate, phone };
               onSave(payload);
             }}
             className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-200 mt-6"
@@ -1623,6 +1603,8 @@ export default function App() {
   const initialViewSetRef = useRef(false);
 
   useEffect(() => {
+    let profileUnsubscribe: (() => void) | null = null;
+
     const initAuth = async () => {
       const initialToken = typeof globalThis !== 'undefined'
         ? (globalThis as { __initial_auth_token?: string }).__initial_auth_token
@@ -1630,17 +1612,20 @@ export default function App() {
 
       if (initialToken) {
         await signInWithCustomToken(auth, initialToken);
-      } else {
-        await signInAnonymously(auth);
       }
     };
     initAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+        profileUnsubscribe = null;
+      }
       if (currentUser) {
         const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'main');
-        const unsubP = onSnapshot(profileRef, (docSnap) => {
+        setIsLoading(true);
+        profileUnsubscribe = onSnapshot(profileRef, (docSnap) => {
            if (docSnap.exists()) {
              setProfile({ id: currentUser.uid, ...docSnap.data() });
              setIsLoading(false);
@@ -1649,13 +1634,15 @@ export default function App() {
              setIsLoading(false);
            }
         });
-        return () => unsubP();
       } else {
         setProfile(null);
         setIsLoading(false);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      if (profileUnsubscribe) profileUnsubscribe();
+      unsubscribe();
+    };
   }, []);
 
   // Garantit que l'arrivée après login se fait sur l'agenda
@@ -1700,98 +1687,80 @@ export default function App() {
   }, [user, profile, view, events.length]);
 
   const handleLogin = async (userData) => {
-      if (!user) return;
-      setIsLoading(true);
-      try {
-        const providedEmail = (userData.email || '').trim();
-        const userProfileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-        const emailProfileRef = doc(db, 'artifacts', appId, 'users_by_email', providedEmail);
-        const publicSummaryRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', providedEmail);
+    setIsLoading(true);
+    try {
+      const providedEmail = (userData.email || '').trim().toLowerCase();
+      const providedPassword = userData.password || '';
 
-        const [snapEmailProfile, snapUserProfile, snapPublic] = await Promise.all([
-          getDoc(emailProfileRef),
-          getDoc(userProfileRef),
-          getDoc(publicSummaryRef)
-        ]);
-        const existingEmailProfile = snapEmailProfile.exists() ? snapEmailProfile.data() : null;
-        const existingUserProfile = snapUserProfile.exists() ? snapUserProfile.data() : null;
-        const existingPublic = snapPublic?.exists() ? snapPublic.data() : null;
-
-        if (userData.isRegistering) {
-          // Nouveau compte : on repart de zéro avec les valeurs saisies
-        const newProfileData = {
-          email: providedEmail,
-          role: userData.role,
-          first_name: userData.first_name || '',
-          last_name: userData.last_name || '',
-          full_name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
-          position: userData.position || '',
-          category: userData.category || 'avant',
-          created_at: serverTimestamp(),
-          arrival_date: new Date().toISOString().split('T')[0],
-          birth_date: userData.birth_date || '',
-          phone: userData.phone || '',
-          password_hash: hashPassword(userData.password || '')
-        };
-
-          await Promise.all([
-            setDoc(userProfileRef, newProfileData), // pas de merge pour éliminer d’anciennes données
-            setDoc(emailProfileRef, newProfileData), // doc stable par email pour la connexion
-            setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }) // pas de mot de passe dans le résumé public
-          ]);
-          setView('dashboard'); // Toujours ouvrir sur l'agenda après inscription
-          return;
-        }
-
-        // Connexion : un profil doit déjà exister
-        if (!existingEmailProfile && !existingPublic && !existingUserProfile) {
-          throw new Error('Profil introuvable. Vérifie tes identifiants ou passe en inscription.');
-        }
-
-        // Vérifier le mot de passe
-        const profileData = existingEmailProfile || existingUserProfile || {};
-        if (!profileData.password_hash) {
-          throw new Error('Mot de passe non défini. Repasse par "Inscription" avec cet email pour le définir.');
-        }
-        const providedHash = hashPassword(userData.password || '');
-        if (providedHash !== profileData.password_hash) {
-          throw new Error('Identifiants invalides.');
-        }
-
-        // Mise à jour minimale pour garder les infos existantes, sans résidus ni diffusion du hash
-        const mergedProfile = { ...existingPublic, ...existingUserProfile, ...existingEmailProfile, password_hash: profileData.password_hash };
-        const { password_hash: existingHash, ...cleanBase } = mergedProfile;
-        delete (cleanBase as Record<string, unknown>).email_normalized;
-
-        const mergedFirstName = cleanBase.first_name || profileData.first_name || '';
-        const mergedLastName = cleanBase.last_name || profileData.last_name || '';
-        const newProfileData = {
-            ...cleanBase,
-            email: providedEmail || cleanBase.email || '',
-            first_name: mergedFirstName,
-            last_name: mergedLastName,
-            full_name: (mergedFirstName || mergedLastName) ? `${mergedFirstName} ${mergedLastName}`.trim() : (cleanBase.full_name || ''),
-            birth_date: profileData.birth_date || cleanBase.birth_date || '',
-            phone: profileData.phone || cleanBase.phone || '',
-            password_hash: existingHash
-        };
-
-        await Promise.all([
-          setDoc(userProfileRef, newProfileData, { merge: true }),
-          setDoc(emailProfileRef, newProfileData, { merge: true }),
-          setDoc(publicSummaryRef, { ...newProfileData, id: providedEmail, password_hash: deleteField() }, { merge: true })
-        ]);
-        
-        setView('dashboard'); // Toujours ouvrir sur l'agenda après connexion
-      } finally {
-        setIsLoading(false);
+      if (!providedEmail || !providedPassword) {
+        throw new Error('Merci de saisir email et mot de passe.');
       }
+
+      let credential;
+      if (userData.isRegistering) {
+        try {
+          credential = await createUserWithEmailAndPassword(auth, providedEmail, providedPassword);
+        } catch (err) {
+          if (err?.code === 'auth/email-already-in-use') {
+            credential = await signInWithEmailAndPassword(auth, providedEmail, providedPassword);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        credential = await signInWithEmailAndPassword(auth, providedEmail, providedPassword);
+      }
+
+      const currentUser = credential.user;
+      const email = currentUser.email || providedEmail;
+      const userProfileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'main');
+      const publicSummaryRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_summaries', email);
+
+      const [existingProfileSnap, legacyPublicSnap] = await Promise.all([
+        getDoc(userProfileRef),
+        getDoc(publicSummaryRef)
+      ]);
+
+      const baseProfile = existingProfileSnap.exists()
+        ? existingProfileSnap.data()
+        : legacyPublicSnap.exists()
+          ? legacyPublicSnap.data()
+          : {
+              email,
+              role: userData.role || 'player',
+              first_name: userData.first_name || '',
+              last_name: userData.last_name || '',
+              full_name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+              category: userData.category || 'avant',
+              arrival_date: new Date().toISOString().split('T')[0],
+              birth_date: userData.birth_date || '',
+              phone: userData.phone || '',
+              created_at: serverTimestamp()
+            };
+
+      const { password_hash: _legacyPassword, ...cleanProfile } = baseProfile || {};
+      const sanitizedProfile = {
+        ...cleanProfile,
+        email,
+        full_name: cleanProfile.full_name || `${cleanProfile.first_name || ''} ${cleanProfile.last_name || ''}`.trim()
+      };
+
+      await Promise.all([
+        setDoc(userProfileRef, sanitizedProfile, { merge: true }),
+        setDoc(publicSummaryRef, { ...sanitizedProfile, id: email }, { merge: true })
+      ]);
+
+      setView('dashboard'); // Toujours ouvrir sur l'agenda après connexion/inscription
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLogout = async () => {
-      if (user) {
-          setProfile(null);
-      }
+      await signOut(auth);
+      setProfile(null);
+      setUser(null);
+      setView('dashboard');
   };
 
   const handleUpdateStatus = async (eventId, status) => {
