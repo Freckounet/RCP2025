@@ -125,6 +125,7 @@ const AuthScreen = ({ onLogin }) => {
       <div className="w-full max-w-md space-y-8 relative z-10">
         <div className="text-center">
           <div className="relative w-32 h-32 mx-auto mb-6 animate-float flex items-center justify-center">
+             <div className="absolute inset-0 rounded-full bg-red-600/40 blur-3xl scale-125 animate-pulse" aria-hidden="true"></div>
              <img 
                src={LogoRCP} 
                alt="Logo Rugby Club Portois" 
