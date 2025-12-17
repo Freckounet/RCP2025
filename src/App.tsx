@@ -344,7 +344,7 @@ const WeeklySummaryModal = ({ events, onClose }) => {
             });
         }
 
-        text += "Merci de confirmer vos présences sur l'application\nLien vers l'application : https://rcp-2025-5u72.vercel.app\n\n";
+        text += "Merci de confirmer vos présences sur l'application\nLien vers l'application : https://rcp-2025.vercel.app/\n\n";
         text += "LES COACHS.";
         setSummaryText(text);
     }, [events]);
